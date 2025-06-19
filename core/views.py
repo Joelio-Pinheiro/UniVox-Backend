@@ -4,7 +4,9 @@ from django.contrib.auth.hashers import check_password
 from django.core.validators import validate_email
 from django.core.exceptions import ValidationError
 from django.contrib.auth.hashers import make_password
-from .models import User  # your custom User model
+from .models import User
+from .models import EmailConfirmation
+from univox.email import generate_confirmation_code, send_confirmation_email
 
 @csrf_exempt
 def create_user(request):
@@ -44,6 +46,11 @@ def create_user(request):
             email=email,
             contact_number=contact_number
         )
+
+        code = generate_confirmation_code()
+        EmailConfirmation.objects.create(user=user, code=code)
+        send_confirmation_email(user, code)
+
         return JsonResponse({'message': 'User created successfully.', 'user_id': user.id})
 
     return JsonResponse({'error': 'Invalid request method.'}, status=405)
@@ -66,7 +73,7 @@ def login_user(request):
     if request.method == 'POST':
         email = request.POST.get('email')
         password = request.POST.get('password')
-        print(email, password)
+
         if not email or not password:
             return JsonResponse({'error': 'Email and Password required.'}, status=400)
 
@@ -75,13 +82,13 @@ def login_user(request):
         except User.DoesNotExist:
             return JsonResponse({'error': 'Invalid credentials.'}, status=401)
 
-        if check_password(password, user.password):
+        if (check_password(password, user.password) and user.email_verified):
             # Authentication success
             request.session['logged'] = True
             return JsonResponse({'message': 'Authentication successful.', 'user_id': user.id})
         else:
             # Wrong password
-            return JsonResponse({'error': 'Invalid credentials.'}, status=401)
+            return JsonResponse({'error': 'Authentication Failed.'}, status=401)
 
     return JsonResponse({'error': 'Invalid request method.'}, status=405)
 
@@ -89,3 +96,29 @@ def login_user(request):
 def logout_user(request):
     request.session.flush()
     return JsonResponse({'message': 'Logged out successfully.'})
+
+@csrf_exempt
+def verify_email(request):
+    if request.method == 'POST':
+        name_input = request.POST.get('name')
+        code_input = request.POST.get('code')
+        user = None
+
+        try:
+            user = User.objects.get(name=name_input)
+        except User.DoesNotExist:
+            return JsonResponse({'error': 'Unknown user.'}, status=401)
+
+        try:
+            confirmation = EmailConfirmation.objects.get(user=user, code=code_input)
+            confirmation.is_confirmed = True
+            confirmation.save()
+            
+            user.email_verified = True
+            user.save()
+
+            return JsonResponse({'message': 'User verified!.'})
+        except EmailConfirmation.DoesNotExist:
+            return JsonResponse({'error': 'Unknown email.'}, status=401)
+
+    return JsonResponse({'error': 'Invalid request method.'}, status=405)

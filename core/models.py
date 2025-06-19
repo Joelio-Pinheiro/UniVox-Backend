@@ -6,3 +6,10 @@ class User(models.Model):
     email = models.CharField(max_length=70)
     contact_number = models.CharField(max_length=11)
     created_at = models.DateTimeField(auto_now_add=True)
+    email_verified = models.BooleanField(default=False)
+
+class EmailConfirmation(models.Model):
+    user = models.OneToOneField(User, on_delete=models.CASCADE)
+    code = models.CharField(max_length=6)
+    created_at = models.DateTimeField(auto_now_add=True)
+    is_confirmed = models.BooleanField(default=False)
