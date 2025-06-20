@@ -23,5 +23,9 @@ urlpatterns = [
     path('create-user/', create_user),
     path('delete-user/', delete_user),
     path('login/', login_user),
-    path('verifyemail/', verify_email)
+    path('logout/', logout_user),
+    path('verifyemail/', verify_email),
+    path('passwordresetreq/', reset_password_request),
+    path('passwordresetvalidate/', reset_password_validate),
+    path('passwordresetnewpass/', reset_password_chooseNew)
 ]
