@@ -86,6 +86,9 @@ def delete_user(request):
 
 @csrf_exempt
 def login_user(request):
+    if (request.session['logged']):
+        return JsonResponse({'error': 'User already logged in.'}, status=401)
+    
     if request.method == 'POST':
         email = request.POST.get('email')
         password = request.POST.get('password')
@@ -101,6 +104,7 @@ def login_user(request):
         if (check_password(password, user.password) and user.email_verified):
             # Authentication success
             request.session['logged'] = True
+            request.session['user'] = user.name
             return JsonResponse({'message': 'Authentication successful.', 'user_id': user.id})
         else:
             # Wrong password
@@ -110,8 +114,11 @@ def login_user(request):
 
 @csrf_exempt
 def logout_user(request):
+    if (not request.session['logged']):
+        return JsonResponse({'error': 'There is not user logged in.'}, status=401)
+    
     request.session.flush()
-    return JsonResponse({'message': 'Logged out successfully.'})
+    return JsonResponse({'message': 'Logged out successfully.'}, 'user_name': request['user'])
 
 @csrf_exempt
 def verify_email(request):
