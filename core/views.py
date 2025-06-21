@@ -86,7 +86,7 @@ def delete_user(request):
 
 @csrf_exempt
 def login_user(request):
-    if (request.session['logged']):
+    if (request.session.get('logged')):
         return JsonResponse({'error': 'User already logged in!'}, status=401)
     
     if request.method == 'POST':
