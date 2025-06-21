@@ -116,9 +116,10 @@ def login_user(request):
 def logout_user(request):
     if (not request.session.get('logged')):
         return JsonResponse({'error': 'There is not user logged in.'}, status=401)
-    
+
+    user_name = request.session.get('user')
     request.session.flush()
-    return JsonResponse({'message': 'Logged out successfully.', 'user_name': request.session.get('user')})
+    return JsonResponse({'message': 'Logged out successfully.', 'user_name': user_name})
 
 @csrf_exempt
 def verify_email(request):
