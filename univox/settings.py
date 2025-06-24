@@ -35,6 +35,7 @@ SECRET_KEY = 'django-insecure-bnr-@ji^w_bqw4f1(zdr=^662jp!c33rre&i6v9334n5mhovld
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
+CORS_ALLOW_CREDENTIALS = True
 ALLOWED_HOSTS = ['univox-backend.onrender.com']
 
 
