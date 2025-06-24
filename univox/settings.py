@@ -37,7 +37,8 @@ DEBUG = True
 
 CORS_ALLOW_CREDENTIALS = True
 ALLOWED_HOSTS = ['univox-backend.onrender.com']
-
+SESSION_COOKIE_SAMESITE = "None"
+SESSION_COOKIE_SECURE = True
 
 # Application definition
 
