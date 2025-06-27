@@ -40,6 +40,9 @@ ALLOWED_HOSTS = ['univox-backend.onrender.com']
 SESSION_COOKIE_SAMESITE = "None"
 SESSION_COOKIE_SECURE = True
 
+SESSION_COOKIE_AGE = 60 * 60 * 24 * 30 #30 Days
+
+
 # Application definition
 
 INSTALLED_APPS = [
