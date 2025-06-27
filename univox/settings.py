@@ -35,8 +35,11 @@ SECRET_KEY = 'django-insecure-bnr-@ji^w_bqw4f1(zdr=^662jp!c33rre&i6v9334n5mhovld
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = []
-
+CORS_ALLOW_CREDENTIALS = True
+ALLOWED_HOSTS = ['univox-backend.onrender.com']
+SESSION_COOKIE_SAMESITE = "None"
+SESSION_COOKIE_SECURE = True
+SESSION_COOKIE_AGE = 60 * 60 * 24 * 30 #30 Days
 
 # Application definition
 
@@ -48,9 +51,7 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'corsheaders',
-    'core',
-    'rest_framework',
-    'drf_yasg',
+    'core'
 ]
 
 MIDDLEWARE = [
