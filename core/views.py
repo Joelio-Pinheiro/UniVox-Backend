@@ -107,7 +107,7 @@ def login_user(request):
 @api_view(['POST'])
 def logout_user(request):
     if (not request.session.get('logged')):
-        return Response({'error': 'There is not user logged in.'}, status=status.HTTP_401_UNAUTHORIZED)
+        return Response({'error': 'There is no user logged in.'}, status=status.HTTP_401_UNAUTHORIZED)
     
     request.session.flush()
     return Response({'message': 'Logged out successfully.'})
