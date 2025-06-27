@@ -84,6 +84,9 @@ def delete_user(request):
 @swagger_auto_schema(method='post', request_body=LoginUserSerializer)
 @api_view(['POST'])
 def login_user(request):
+    if (request.session.get('logged')):
+        return Response({'error': 'User already logged in!'}, status=status.HTTP_401_UNAUTHORIZED)
+
     email = request.data.get('email')
     password = request.data.get('password')
 
