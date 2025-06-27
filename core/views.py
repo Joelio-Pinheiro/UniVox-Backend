@@ -103,6 +103,9 @@ def login_user(request):
 
 @api_view(['POST'])
 def logout_user(request):
+    if (not request.session['logged']):
+        return JsonResponse({'error': 'There is not user logged in.'}, status=401)
+    
     request.session.flush()
     return Response({'message': 'Logged out successfully.'})
 
