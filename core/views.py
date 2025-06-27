@@ -1,250 +1,217 @@
-from django.views.decorators.csrf import csrf_exempt
-from django.http import JsonResponse
+from rest_framework.decorators import api_view
+from rest_framework.response import Response
+from rest_framework import status
+from drf_yasg.utils import swagger_auto_schema
 from django.utils import timezone
-from django.contrib.auth.hashers import check_password
+from django.contrib.auth.hashers import check_password, make_password
 from django.core.validators import validate_email
 from django.core.exceptions import ValidationError
-from django.contrib.auth.hashers import make_password
-from .models import User
-from .models import EmailConfirmation
-from .models import PasswordReset
+from .models import User, EmailConfirmation, PasswordReset
 from univox.email import generate_confirmation_code, send_confirmation_email, is_code_expired, send_password_confirmation_code
 
-@csrf_exempt
+from .serializers import (
+    CreateUserSerializer,
+    DeleteUserSerializer,
+    LoginUserSerializer,
+    VerifyEmailSerializer,
+    ResetPasswordRequestSerializer,
+    ResetPasswordValidateSerializer,
+    ResetPasswordChooseNewSerializer,
+)
+
+@swagger_auto_schema(method='post', request_body=CreateUserSerializer)
+@api_view(['POST'])
 def create_user(request):
-    if request.method == 'POST':
-        # Validating POST Request
-        required_fields = ['name', 'password', 'email', 'contact_number']
-        missing_fields = [field for field in required_fields if not request.POST.get(field)]
+    data = request.data
+    required_fields = ['name', 'password', 'email', 'contact_number']
+    missing_fields = [field for field in required_fields if not data.get(field)]
 
-        if missing_fields:
-            return JsonResponse(
-                {'error': f'Missing required fields: {", ".join(missing_fields)}.'},
-                status=400
-            )
+    if missing_fields:
+        return Response({'error': f'Missing required fields: {", ".join(missing_fields)}.'}, status=status.HTTP_400_BAD_REQUEST)
 
-        name = request.POST.get('name')
-        password = request.POST.get('password')
-        email = request.POST.get('email')
-        contact_number = request.POST.get('contact_number')
+    name = data['name']
+    password = data['password']
+    email = data['email']
+    contact_number = data['contact_number']
 
-        # Validating email
-        try: validate_email(email)
-        except ValidationError:
-            return JsonResponse({'error': 'Invalid email format.'}, status=400)
+    try:
+        validate_email(email)
+    except ValidationError:
+        return Response({'error': 'Invalid email format.'}, status=status.HTTP_400_BAD_REQUEST)
 
-        if User.objects.filter(name__iexact=name).exists():
-            return JsonResponse({'error': 'Name already exists.'}, status=400)
-        
-        if User.objects.filter(email__iexact=email).exists():
-            return JsonResponse({'error': 'Email already exists.'}, status=400)
+    if User.objects.filter(name__iexact=name).exists():
+        return Response({'error': 'Name already exists.'}, status=status.HTTP_400_BAD_REQUEST)
 
-        #Checking if user exists but is not verified yet
-        try:
-            existing_user = User.objects.get(name=name)
-            existing_confirmation = User.objects.get(user=existing_user)
+    if User.objects.filter(email__iexact=email).exists():
+        return Response({'error': 'Email already exists.'}, status=status.HTTP_400_BAD_REQUEST)
 
-            #Can't create because there is some user validating his/her account
-            if (not is_code_expired(existing_confirmation.created_at)):
-                return JsonResponse({'error': 'Cannot use this name right now!'}, status=401)
-            else:
-                existing_user.delete()
+    try:
+        existing_user = User.objects.get(name=name)
+        existing_confirmation = EmailConfirmation.objects.get(user=existing_user)
 
-        except (User.DoesNotExist, EmailConfirmation.DoesNotExist):
-            pass
-
-        # Hashing password
-        hashed_password = make_password(password)
-
-        user = User.objects.create(
-            name=name,
-            password=hashed_password,
-            email=email,
-            contact_number=contact_number
-        )
-
-        code = generate_confirmation_code()
-        EmailConfirmation.objects.create(user=user, code=code)
-        send_confirmation_email(user, code)
-
-        return JsonResponse({'message': 'Verification code sent to email.', 'user_id': user.id})
-
-    return JsonResponse({'error': 'Invalid request method.'}, status=405)
-
-@csrf_exempt
-def delete_user(request):
-    if request.method == 'POST':
-        name = request.POST.get('name')
-    
-        if not User.objects.filter(name__iexact=name).exists():
-            return JsonResponse({'error': 'Name does not exists.'}, status=400)
-
-        user = User.objects.get(name=name)
-        user.delete()
-
-        return JsonResponse({'message': 'User deleted successfully.', 'user_name': name})
-
-@csrf_exempt
-def login_user(request):
-    if request.method == 'POST':
-        email = request.POST.get('email')
-        password = request.POST.get('password')
-
-        if not email or not password:
-            return JsonResponse({'error': 'Email and Password required.'}, status=400)
-
-        try:
-            user = User.objects.get(email=email)
-        except User.DoesNotExist:
-            return JsonResponse({'error': 'Invalid credentials.'}, status=401)
-
-        if (check_password(password, user.password) and user.email_verified):
-            # Authentication success
-            request.session['logged'] = True
-            return JsonResponse({'message': 'Authentication successful.', 'user_id': user.id})
+        if not is_code_expired(existing_confirmation.created_at):
+            return Response({'error': 'Cannot use this name right now!'}, status=status.HTTP_401_UNAUTHORIZED)
         else:
-            # Wrong password
-            return JsonResponse({'error': 'Authentication Failed.'}, status=401)
+            existing_user.delete()
 
-    return JsonResponse({'error': 'Invalid request method.'}, status=405)
+    except (User.DoesNotExist, EmailConfirmation.DoesNotExist):
+        pass
 
-@csrf_exempt
+    hashed_password = make_password(password)
+    user = User.objects.create(name=name, password=hashed_password, email=email, contact_number=contact_number)
+
+    code = generate_confirmation_code()
+    EmailConfirmation.objects.create(user=user, code=code)
+    send_confirmation_email(user, code)
+
+    return Response({'message': 'Verification code sent to email.', 'user_id': user.id})
+
+
+@swagger_auto_schema(method='post', request_body=DeleteUserSerializer)
+@api_view(['POST'])
+def delete_user(request):
+    name = request.data.get('name')
+
+    if not User.objects.filter(name__iexact=name).exists():
+        return Response({'error': 'Name does not exist.'}, status=status.HTTP_400_BAD_REQUEST)
+
+    user = User.objects.get(name=name)
+    user.delete()
+
+    return Response({'message': 'User deleted successfully.', 'user_name': name})
+
+
+@swagger_auto_schema(method='post', request_body=LoginUserSerializer)
+@api_view(['POST'])
+def login_user(request):
+    email = request.data.get('email')
+    password = request.data.get('password')
+
+    if not email or not password:
+        return Response({'error': 'Email and Password required.'}, status=status.HTTP_400_BAD_REQUEST)
+
+    try:
+        user = User.objects.get(email=email)
+    except User.DoesNotExist:
+        return Response({'error': 'Invalid credentials.'}, status=status.HTTP_401_UNAUTHORIZED)
+
+    if check_password(password, user.password) and user.email_verified:
+        request.session['logged'] = True
+        return Response({'message': 'Authentication successful.', 'user_id': user.id})
+    else:
+        return Response({'error': 'Authentication Failed.'}, status=status.HTTP_401_UNAUTHORIZED)
+
+@api_view(['POST'])
 def logout_user(request):
     request.session.flush()
-    return JsonResponse({'message': 'Logged out successfully.'})
+    return Response({'message': 'Logged out successfully.'})
 
-@csrf_exempt
+@swagger_auto_schema(method='post', request_body=VerifyEmailSerializer)
+@api_view(['POST'])
 def verify_email(request):
-    if request.method == 'POST':
-        email_input = request.POST.get('email')
-        code_input = request.POST.get('code')
-        user = None
+    email_input = request.data.get('email')
+    code_input = request.data.get('code')
 
-        #Getting user existence
-        try:
-            user = User.objects.get(email=email_input)
-        except User.DoesNotExist:
-            return JsonResponse({'error': 'Unknown user.'}, status=401)
+    try:
+        user = User.objects.get(email=email_input)
+    except User.DoesNotExist:
+        return Response({'error': 'Unknown user.'}, status=status.HTTP_401_UNAUTHORIZED)
 
-        #User already verified
-        if (user.email_verified):
-            return JsonResponse({'error': 'User already verified!.'}, status=401)
+    if user.email_verified:
+        return Response({'error': 'User already verified!'}, status=status.HTTP_401_UNAUTHORIZED)
 
-        #Validating confirmation code
-        try:
-            confirmation = EmailConfirmation.objects.get(user=user, code=code_input)
+    try:
+        confirmation = EmailConfirmation.objects.get(user=user, code=code_input)
 
-            #Code expired
-            if (is_code_expired(confirmation.created_at)):
-                user.delete()
-                return JsonResponse({'error': 'Code expired!'}, status=401)
+        if is_code_expired(confirmation.created_at):
+            user.delete()
+            return Response({'error': 'Code expired!'}, status=status.HTTP_401_UNAUTHORIZED)
 
-            #Verifying code
-            if (code_input != confirmation.code):
-                return JsonResponse({'error': 'Invalid code!'}, status=401)
+        if code_input != confirmation.code:
+            return Response({'error': 'Invalid code!'}, status=status.HTTP_401_UNAUTHORIZED)
 
-            #else
-            confirmation.is_confirmed = True
-            confirmation.save()
-            
-            user.email_verified = True
+        confirmation.is_confirmed = True
+        confirmation.save()
+
+        user.email_verified = True
+        user.save()
+
+        return Response({'message': 'User verified!'})
+    except EmailConfirmation.DoesNotExist:
+        return Response({'error': 'Unknown confirmation request!'}, status=status.HTTP_401_UNAUTHORIZED)
+
+@swagger_auto_schema(method='post', request_body=ResetPasswordRequestSerializer)
+@api_view(['POST'])
+def reset_password_request(request):
+    email = request.data.get('email')
+
+    try:
+        user = User.objects.get(email=email)
+    except User.DoesNotExist:
+        return Response({'error': 'Unknown user.'}, status=status.HTTP_401_UNAUTHORIZED)
+
+    try:
+        password_confirmation = PasswordReset.objects.get(user=user)
+
+        if is_code_expired(password_confirmation.created_at):
+            password_confirmation.delete()
+        else:
+            return Response({'error': 'A password recovery request already exists.'}, status=status.HTTP_401_UNAUTHORIZED)
+    except PasswordReset.DoesNotExist:
+        pass
+
+    code = generate_confirmation_code()
+    PasswordReset.objects.create(user=user, code=code)
+    send_password_confirmation_code(user, code)
+
+    return Response({'message': 'Verification code sent to email.'})
+
+@swagger_auto_schema(method='post', request_body=ResetPasswordValidateSerializer)
+@api_view(['POST'])
+def reset_password_validate(request):
+    email = request.data.get('email')
+    code = request.data.get('code')
+
+    try:
+        user = User.objects.get(email=email)
+    except User.DoesNotExist:
+        return Response({'error': 'Unknown user.'}, status=status.HTTP_401_UNAUTHORIZED)
+
+    try:
+        password_confirmation = PasswordReset.objects.get(user=user)
+
+        if is_code_expired(password_confirmation.created_at):
+            password_confirmation.delete()
+            return Response({'error': 'Password recovery code expired.'}, status=status.HTTP_401_UNAUTHORIZED)
+
+        if code != password_confirmation.code:
+            return Response({'error': 'Invalid code!'}, status=status.HTTP_401_UNAUTHORIZED)
+
+        password_confirmation.is_confirmed = True
+        password_confirmation.save()
+        return Response({'Message': 'Password recovery code confirmed!'})
+    except PasswordReset.DoesNotExist:
+        return Response({'error': 'No password recovery request exists.'}, status=status.HTTP_401_UNAUTHORIZED)
+
+@swagger_auto_schema(method='post', request_body=ResetPasswordChooseNewSerializer)
+@api_view(['POST'])
+def reset_password_chooseNew(request):
+    email = request.data.get('email')
+    newPassword = request.data.get('new_password')
+
+    try:
+        user = User.objects.get(email=email)
+    except User.DoesNotExist:
+        return Response({'error': 'Unknown user.'}, status=status.HTTP_401_UNAUTHORIZED)
+
+    try:
+        password_confirmation = PasswordReset.objects.get(user=user)
+
+        if password_confirmation.is_confirmed:
+            user.password = make_password(newPassword)
             user.save()
-
-            return JsonResponse({'message': 'User verified!.'})
-        except EmailConfirmation.DoesNotExist:
-            return JsonResponse({'error': 'Unknown confirmation request!.'}, status=401)
-
-    return JsonResponse({'error': 'Invalid request method.'}, status=405)
-
-#Password resetting process
-@csrf_exempt 
-def reset_password_request(request):    #1. Making the request
-    if request.method == 'POST':
-        email = request.POST.get('email')
-        
-        #Getting user existence
-        try:
-            user = User.objects.get(email=email)
-        except User.DoesNotExist:
-            return JsonResponse({'error': 'Unknown user.'}, status=401)
-        
-        #Checking if there is any active password recovery requests
-        try:
-            password_confirmation = PasswordReset.objects.get(user=user)
-
-            if (is_code_expired(password_confirmation.created_at)):
-                password_confirmation.delete()
-            else:
-                return JsonResponse({'error': 'A password recovery request already exists.'}, status=401)                
-        except PasswordReset.DoesNotExist:
-            pass
-
-        #Sending code
-        code = generate_confirmation_code()
-        PasswordReset.objects.create(user=user, code=code)
-        send_password_confirmation_code(user, code)
-
-        return JsonResponse({'message': 'Verification code sent to email.'})
-    
-    return JsonResponse({'error': 'Invalid request method.'}, status=405)
-
-@csrf_exempt
-def reset_password_validate(request):    #2. Validate the code
-    if request.method == 'POST':
-        email = request.POST.get('email')
-        code = request.POST.get('code')
-
-        #Getting user existence
-        try:
-            user = User.objects.get(email=email)
-        except User.DoesNotExist:
-            return JsonResponse({'error': 'Unknown user.'}, status=401)
-        
-        #Checking if there is any active password recovery requests
-        try:
-            password_confirmation = PasswordReset.objects.get(user=user)
-
-            if (is_code_expired(password_confirmation.created_at)):
-                password_confirmation.delete()
-                return JsonResponse({'error': 'Password recovery code expired.'}, status=401)
-            else:
-                if (code != password_confirmation.code):
-                    return JsonResponse({'error': 'Invalid code!'}, status=401)
-                
-                password_confirmation.is_confirmed = True
-                password_confirmation.save()
-
-                return JsonResponse({'Message': 'Password recovery code confirmed!'})
-
-        except PasswordReset.DoesNotExist:
-            return JsonResponse({'error': 'A password recovery request does not exist for this user.'}, status=401) 
-        
-    return JsonResponse({'error': 'Invalid request method.'}, status=405)
-
-@csrf_exempt
-def reset_password_chooseNew(request):    #3. Choose new password
-    if request.method == 'POST':
-        email = request.POST.get('email')
-        newPassword = request.POST.get('new_password')
-
-        #Getting user existence
-        try:
-            user = User.objects.get(email=email)
-        except User.DoesNotExist:
-            return JsonResponse({'error': 'Unknown user.'}, status=401)
-        
-        #Checking if there is any active password recovery requests
-        try:
-            password_confirmation = PasswordReset.objects.get(user=user)
-
-            if (password_confirmation.is_confirmed):
-                user.password = make_password(newPassword)
-                user.save()
-                return JsonResponse({'message': 'Password succesfully changed!.'})
-            else:   
-                return JsonResponse({'error': 'Password request is not validated yet!.'}, status=401)
-
-        except PasswordReset.DoesNotExist:
-            return JsonResponse({'error': 'A password recovery request does not exist for this user.'}, status=401) 
-        
-    return JsonResponse({'error': 'Invalid request method.'}, status=405)
+            return Response({'message': 'Password successfully changed!'})
+        else:
+            return Response({'error': 'Password request not validated yet!'}, status=status.HTTP_401_UNAUTHORIZED)
+    except PasswordReset.DoesNotExist:
+        return Response({'error': 'No password recovery request exists.'}, status=status.HTTP_401_UNAUTHORIZED)
