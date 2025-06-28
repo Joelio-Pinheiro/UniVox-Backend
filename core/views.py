@@ -37,13 +37,13 @@ def create_user(request):
     try:
         validate_email(email)
     except ValidationError:
-        return Response({'error': 'Invalid email format.'}, status=status.HTTP_400_BAD_REQUEST)
+        return Response({'error': 'Formato de email inválido'}, status=status.HTTP_400_BAD_REQUEST)
 
     if User.objects.filter(name__iexact=name).exists():
-        return Response({'error': 'Name already exists.'}, status=status.HTTP_400_BAD_REQUEST)
+        return Response({'error': 'Nome de usuário já existe'}, status=status.HTTP_400_BAD_REQUEST)
 
     if User.objects.filter(email__iexact=email).exists():
-        return Response({'error': 'Email already exists.'}, status=status.HTTP_400_BAD_REQUEST)
+        return Response({'error': 'Já existe uma conta com este email'}, status=status.HTTP_400_BAD_REQUEST)
 
     try:
         existing_user = User.objects.get(name=name)
@@ -64,7 +64,7 @@ def create_user(request):
     EmailConfirmation.objects.create(user=user, code=code)
     send_confirmation_email(user, code)
 
-    return Response({'message': 'Verification code sent to email.', 'user_id': user.id})
+    return Response({'message': 'Código de verificação enviado', 'user_id': user.id})
 
 
 @swagger_auto_schema(method='post', request_body=DeleteUserSerializer)
@@ -73,44 +73,44 @@ def delete_user(request):
     name = request.data.get('name')
 
     if not User.objects.filter(name__iexact=name).exists():
-        return Response({'error': 'Name does not exist.'}, status=status.HTTP_400_BAD_REQUEST)
+        return Response({'error': 'Não existe um usuário com este nome.'}, status=status.HTTP_400_BAD_REQUEST)
 
     user = User.objects.get(name=name)
     user.delete()
 
-    return Response({'message': 'User deleted successfully.', 'user_name': name})
+    return Response({'message': 'Conta do usuário removida.', 'user_name': name})
 
 
 @swagger_auto_schema(method='post', request_body=LoginUserSerializer)
 @api_view(['POST'])
 def login_user(request):
     if (request.session.get('logged')):
-        return Response({'error': 'User already logged in!'}, status=status.HTTP_401_UNAUTHORIZED)
+        return Response({'error': 'Usuário já possui sessão ativa'}, status=status.HTTP_401_UNAUTHORIZED)
 
     email = request.data.get('email')
     password = request.data.get('password')
 
     if not email or not password:
-        return Response({'error': 'Email and Password required.'}, status=status.HTTP_400_BAD_REQUEST)
+        return Response({'error': 'Campos não devem ser vazios'}, status=status.HTTP_400_BAD_REQUEST)
 
     try:
         user = User.objects.get(email=email)
     except User.DoesNotExist:
-        return Response({'error': 'Invalid credentials.'}, status=status.HTTP_401_UNAUTHORIZED)
+        return Response({'error': 'Não existe uma conta com este email'}, status=status.HTTP_401_UNAUTHORIZED)
 
     if check_password(password, user.password) and user.email_verified:
         request.session['logged'] = True
-        return Response({'message': 'Authentication successful.', 'user_id': user.id})
+        return Response({'message': 'Usuário autenticado', 'user_id': user.id})
     else:
-        return Response({'error': 'Authentication Failed.'}, status=status.HTTP_401_UNAUTHORIZED)
+        return Response({'error': 'Falha na autenticação'}, status=status.HTTP_401_UNAUTHORIZED)
 
 @api_view(['POST'])
 def logout_user(request):
     if (not request.session['logged']):
-        return Response({'error': 'There is not user logged in.'}, status=status.HTTP_401_UNAUTHORIZED)
+        return Response({'error': 'Usuário não possui sessão ativa'}, status=status.HTTP_401_UNAUTHORIZED)
     
     request.session.flush()
-    return Response({'message': 'Logged out successfully.'})
+    return Response({'message': 'Sessão encerrada com sucesso'})
 
 @swagger_auto_schema(method='post', request_body=VerifyEmailSerializer)
 @api_view(['POST'])
@@ -121,20 +121,20 @@ def verify_email(request):
     try:
         user = User.objects.get(email=email_input)
     except User.DoesNotExist:
-        return Response({'error': 'Unknown user.'}, status=status.HTTP_401_UNAUTHORIZED)
+        return Response({'error': 'Não existe uma conta com este email'}, status=status.HTTP_401_UNAUTHORIZED)
 
     if user.email_verified:
-        return Response({'error': 'User already verified!'}, status=status.HTTP_401_UNAUTHORIZED)
+        return Response({'error': 'Email já verificado'}, status=status.HTTP_401_UNAUTHORIZED)
 
     try:
         confirmation = EmailConfirmation.objects.get(user=user, code=code_input)
 
         if is_code_expired(confirmation.created_at):
             user.delete()
-            return Response({'error': 'Code expired!'}, status=status.HTTP_401_UNAUTHORIZED)
+            return Response({'error': 'Código expirado. Por favor, solicite um novo'}, status=status.HTTP_401_UNAUTHORIZED)
 
         if code_input != confirmation.code:
-            return Response({'error': 'Invalid code!'}, status=status.HTTP_401_UNAUTHORIZED)
+            return Response({'error': 'Código inválido'}, status=status.HTTP_401_UNAUTHORIZED)
 
         confirmation.is_confirmed = True
         confirmation.save()
@@ -142,9 +142,9 @@ def verify_email(request):
         user.email_verified = True
         user.save()
 
-        return Response({'message': 'User verified!'})
+        return Response({'message': 'Usuário verificado'})
     except EmailConfirmation.DoesNotExist:
-        return Response({'error': 'Unknown confirmation request!'}, status=status.HTTP_401_UNAUTHORIZED)
+        return Response({'error': 'Requisição de confirmação desconhecida'}, status=status.HTTP_401_UNAUTHORIZED)
 
 @swagger_auto_schema(method='post', request_body=ResetPasswordRequestSerializer)
 @api_view(['POST'])
@@ -154,7 +154,7 @@ def reset_password_request(request):
     try:
         user = User.objects.get(email=email)
     except User.DoesNotExist:
-        return Response({'error': 'Unknown user.'}, status=status.HTTP_401_UNAUTHORIZED)
+        return Response({'error': 'Não existe conta com este email'}, status=status.HTTP_401_UNAUTHORIZED)
 
     try:
         password_confirmation = PasswordReset.objects.get(user=user)
@@ -162,7 +162,7 @@ def reset_password_request(request):
         if is_code_expired(password_confirmation.created_at):
             password_confirmation.delete()
         else:
-            return Response({'error': 'A password recovery request already exists.'}, status=status.HTTP_401_UNAUTHORIZED)
+            return Response({'error': 'Já há um pedido de alteração de senha aberto'}, status=status.HTTP_401_UNAUTHORIZED)
     except PasswordReset.DoesNotExist:
         pass
 
@@ -170,7 +170,7 @@ def reset_password_request(request):
     PasswordReset.objects.create(user=user, code=code)
     send_password_confirmation_code(user, code)
 
-    return Response({'message': 'Verification code sent to email.'})
+    return Response({'message': 'Código enviado. Por favor, verifique seu email'})
 
 @swagger_auto_schema(method='post', request_body=ResetPasswordValidateSerializer)
 @api_view(['POST'])
@@ -181,23 +181,23 @@ def reset_password_validate(request):
     try:
         user = User.objects.get(email=email)
     except User.DoesNotExist:
-        return Response({'error': 'Unknown user.'}, status=status.HTTP_401_UNAUTHORIZED)
+        return Response({'error': 'Não existe uma conta com este email'}, status=status.HTTP_401_UNAUTHORIZED)
 
     try:
         password_confirmation = PasswordReset.objects.get(user=user)
 
         if is_code_expired(password_confirmation.created_at):
             password_confirmation.delete()
-            return Response({'error': 'Password recovery code expired.'}, status=status.HTTP_401_UNAUTHORIZED)
+            return Response({'error': 'Código expirado. Por favor, solicite um novo'}, status=status.HTTP_401_UNAUTHORIZED)
 
         if code != password_confirmation.code:
-            return Response({'error': 'Invalid code!'}, status=status.HTTP_401_UNAUTHORIZED)
+            return Response({'error': 'Código inválido'}, status=status.HTTP_401_UNAUTHORIZED)
 
         password_confirmation.is_confirmed = True
         password_confirmation.save()
-        return Response({'Message': 'Password recovery code confirmed!'})
+        return Response({'Message': 'Código confirmado'})
     except PasswordReset.DoesNotExist:
-        return Response({'error': 'No password recovery request exists.'}, status=status.HTTP_401_UNAUTHORIZED)
+        return Response({'error': 'Não existe uma solicitação para troca de senha aberta'}, status=status.HTTP_401_UNAUTHORIZED)
 
 @swagger_auto_schema(method='post', request_body=ResetPasswordChooseNewSerializer)
 @api_view(['POST'])
@@ -208,7 +208,7 @@ def reset_password_chooseNew(request):
     try:
         user = User.objects.get(email=email)
     except User.DoesNotExist:
-        return Response({'error': 'Unknown user.'}, status=status.HTTP_401_UNAUTHORIZED)
+        return Response({'error': 'Não existe uma conta com este email'}, status=status.HTTP_401_UNAUTHORIZED)
 
     try:
         password_confirmation = PasswordReset.objects.get(user=user)
@@ -216,8 +216,8 @@ def reset_password_chooseNew(request):
         if password_confirmation.is_confirmed:
             user.password = make_password(newPassword)
             user.save()
-            return Response({'message': 'Password successfully changed!'})
+            return Response({'message': 'Senha alterada com sucesso'})
         else:
-            return Response({'error': 'Password request not validated yet!'}, status=status.HTTP_401_UNAUTHORIZED)
+            return Response({'error': 'Requisição ainda não validada'}, status=status.HTTP_401_UNAUTHORIZED)
     except PasswordReset.DoesNotExist:
-        return Response({'error': 'No password recovery request exists.'}, status=status.HTTP_401_UNAUTHORIZED)
+        return Response({'error': 'Não existe uma solicitação de troca de senha aberta'}, status=status.HTTP_401_UNAUTHORIZED)
