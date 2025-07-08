@@ -227,7 +227,6 @@ def reset_password_chooseNew(request):
 @api_view(['POST'])
 def reset_password_resend(request):
     email = request.data.get('email')
-    timeLeft = 0
 
     try:
         user = User.objects.get(email=email)
@@ -244,7 +243,6 @@ def reset_password_resend(request):
             newCode = generate_confirmation_code()
             send_password_confirmation_code(user, newCode)
 
-            timeLeft = password_confirmation - timezone.now()
             password_confirmation.code = newCode
             password_confirmation.created_at = timezone.now()
             
@@ -252,6 +250,7 @@ def reset_password_resend(request):
 
             return Response({'message': 'Um novo código de confirmação foi enviado para seu email'})
         else:
+            timeLeft = password_confirmation - timezone.now()
             return Response({'error': 'Aguarde mais um tempo para o reenvio', 'timeleft': timeLeft.total_seconds()}, status=status.HTTP_400_BAD_REQUEST)
     except PasswordReset.DoesNotExist:
         return Response({'error': 'Não existe uma solicitação para troca de senha aberta'}, status=status.HTTP_401_UNAUTHORIZED)
