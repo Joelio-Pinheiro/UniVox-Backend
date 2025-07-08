@@ -42,7 +42,6 @@ SESSION_COOKIE_SECURE = True
 
 SESSION_COOKIE_AGE = 60 * 60 * 24 * 30 #30 Days
 
-
 # Application definition
 
 INSTALLED_APPS = [
@@ -53,7 +52,9 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'corsheaders',
-    'core'
+    'rest_framework',
+    'drf_yasg',
+    'core',
 ]
 
 MIDDLEWARE = [

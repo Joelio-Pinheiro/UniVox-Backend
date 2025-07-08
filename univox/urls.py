@@ -17,6 +17,7 @@ schema_view = get_schema_view(
     ),
     public=True,
     permission_classes=[permissions.AllowAny],
+    url='https://univox-backend.onrender.com',
 )
 
 urlpatterns = [
@@ -35,6 +36,7 @@ urlpatterns = [
     path('users/passwordresetreq/', reset_password_request),
     path('users/passwordresetvalidate/', reset_password_validate),
     path('users/passwordresetnewpass/', reset_password_chooseNew),
+    path('users/passwordresetresend/', reset_password_resend),
 
     #Post stuff
     

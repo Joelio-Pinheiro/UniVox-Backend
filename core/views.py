@@ -106,7 +106,7 @@ def login_user(request):
 
 @api_view(['POST'])
 def logout_user(request):
-    if (not request.session['logged']):
+    if (not request.session.get('logged')):
         return Response({'error': 'There is not user logged in.'}, status=status.HTTP_401_UNAUTHORIZED)
     
     request.session.flush()
@@ -221,3 +221,9 @@ def reset_password_chooseNew(request):
             return Response({'error': 'Password request not validated yet!'}, status=status.HTTP_401_UNAUTHORIZED)
     except PasswordReset.DoesNotExist:
         return Response({'error': 'No password recovery request exists.'}, status=status.HTTP_401_UNAUTHORIZED)
+
+@swagger_auto_schema(method='post', request_body=ResetPasswordChooseNewSerializer)
+@api_view(['POST'])
+def reset_password_resend(request):
+    email = request.data.get('email')
+    newPassword = request.data.get('new_password')
