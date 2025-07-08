@@ -227,3 +227,27 @@ def reset_password_chooseNew(request):
 def reset_password_resend(request):
     email = request.data.get('email')
     newPassword = request.data.get('new_password')
+
+    try:
+        user = User.objects.get(email=email)
+    except User.DoesNotExist:
+        return Response({'error': 'Não existe uma conta com este email'}, status=status.HTTP_401_UNAUTHORIZED)
+    
+    try:
+        password_confirmation = PasswordReset.objects.get(user=user)
+
+        if is_code_expired(password_confirmation.created_at):
+            newCode = generate_confirmation_code()
+            send_password_confirmation_code(user, newCode)
+
+            timeLeft = password_confirmation - timezone.now()
+            password_confirmation.code = newCode
+            password_confirmation.created_at = timezone.now()
+            
+            password_confirmation.save()
+
+            return Response({'message': 'Um novo código de confirmação foi enviado para seu email'})
+        else:
+            return Response({'error': 'Aguarde mais um tempo para o reenvio', 'timeleft': timeLeft.total_seconds()}, status=status.HTTP_400_UNAUTHORIZED)
+    except PasswordReset.DoesNotExist:
+        return Response({'error': 'Não existe uma solicitação para troca de senha aberta'}, status=status.HTTP_401_UNAUTHORIZED)
