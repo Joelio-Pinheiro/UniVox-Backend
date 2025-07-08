@@ -227,6 +227,7 @@ def reset_password_chooseNew(request):
 @api_view(['POST'])
 def reset_password_resend(request):
     email = request.data.get('email')
+    timeLeft = 0
 
     try:
         user = User.objects.get(email=email)
