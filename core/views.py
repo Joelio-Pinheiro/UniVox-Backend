@@ -236,6 +236,9 @@ def reset_password_resend(request):
     try:
         password_confirmation = PasswordReset.objects.get(user=user)
 
+        if password_confirmation.is_confirmed:
+            return Response({'error': 'Senha já foi confirmada'}, status=status.HTTP_400_BAD_REQUEST)
+
         if is_code_expired(password_confirmation.created_at):
             newCode = generate_confirmation_code()
             send_password_confirmation_code(user, newCode)
@@ -248,6 +251,6 @@ def reset_password_resend(request):
 
             return Response({'message': 'Um novo código de confirmação foi enviado para seu email'})
         else:
-            return Response({'error': 'Aguarde mais um tempo para o reenvio', 'timeleft': timeLeft.total_seconds()}, status=status.HTTP_400_UNAUTHORIZED)
+            return Response({'error': 'Aguarde mais um tempo para o reenvio', 'timeleft': timeLeft.total_seconds()}, status=status.HTTP_400_BAD_REQUEST)
     except PasswordReset.DoesNotExist:
         return Response({'error': 'Não existe uma solicitação para troca de senha aberta'}, status=status.HTTP_401_UNAUTHORIZED)
