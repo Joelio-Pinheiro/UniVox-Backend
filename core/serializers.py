@@ -35,3 +35,6 @@ class ResetPasswordValidateSerializer(serializers.Serializer):
 class ResetPasswordChooseNewSerializer(serializers.Serializer):
     email = serializers.EmailField()
     new_password = serializers.CharField(write_only=True)
+
+class ResetPasswordResend(serializers.Serializer):
+    email = serializers.EmailField()

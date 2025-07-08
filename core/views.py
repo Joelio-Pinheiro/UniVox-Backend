@@ -17,6 +17,7 @@ from .serializers import (
     ResetPasswordRequestSerializer,
     ResetPasswordValidateSerializer,
     ResetPasswordChooseNewSerializer,
+    ResetPasswordResend,
 )
 
 @swagger_auto_schema(method='post', request_body=CreateUserSerializer)
@@ -222,11 +223,10 @@ def reset_password_chooseNew(request):
     except PasswordReset.DoesNotExist:
         return Response({'error': 'No password recovery request exists.'}, status=status.HTTP_401_UNAUTHORIZED)
 
-@swagger_auto_schema(method='post', request_body=ResetPasswordChooseNewSerializer)
+@swagger_auto_schema(method='post', request_body=ResetPasswordResend)
 @api_view(['POST'])
 def reset_password_resend(request):
     email = request.data.get('email')
-    newPassword = request.data.get('new_password')
 
     try:
         user = User.objects.get(email=email)
