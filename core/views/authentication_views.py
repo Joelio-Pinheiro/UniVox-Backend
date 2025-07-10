@@ -18,7 +18,8 @@ from ..serializers import (
     ResetPasswordValidateSerializer,
     ResetPasswordChooseNewSerializer,
     ResetPasswordResend,
-    UserListSerializer
+    UserListSerializer,
+    UpdateUserSerializer
 )
 
 #GET PARA TESTES
@@ -37,7 +38,7 @@ def create_user(request):
     missing_fields = [field for field in required_fields if not data.get(field)]
 
     if missing_fields:
-        return Response({'error': f'Missing required fields: {", ".join(missing_fields)}.'}, status=status.HTTP_400_BAD_REQUEST)
+        return Response({'error': f'Campos em branco: {", ".join(missing_fields)}.'}, status=status.HTTP_400_BAD_REQUEST)
 
     name = data['name']
     password = data['password']
@@ -46,22 +47,22 @@ def create_user(request):
     try:
         validate_email(email)
     except ValidationError:
-        return Response({'error': 'Invalid email format.'}, status=status.HTTP_400_BAD_REQUEST)
+        return Response({'error': 'Formato de email inválido.'}, status=status.HTTP_400_BAD_REQUEST)
 
     if User.objects.filter(name__iexact=name).exists():
-        return Response({'error': 'Name already exists.'}, status=status.HTTP_400_BAD_REQUEST)
+        return Response({'error': 'Nome já em uso.'}, status=status.HTTP_400_BAD_REQUEST)
 
     if User.objects.filter(email__iexact=email).exists():
-        return Response({'error': 'Email already exists.'}, status=status.HTTP_400_BAD_REQUEST)
+        return Response({'error': 'Esse email já está em uso.'}, status=status.HTTP_400_BAD_REQUEST)
 
     try:
         email_prefix = email.split('@')[0]
         user_name = f'@{email_prefix}'
     except IndexError:
-        return Response({'error': 'Invalid email format.'}, status=status.HTTP_400_BAD_REQUEST)
+        return Response({'error': 'Formato de email inválido.'}, status=status.HTTP_400_BAD_REQUEST)
     
     if User.objects.filter(user_name__iexact=user_name).exists():
-        return Response({'error': 'A user with this email-derived username already exists.'}, status=status.HTTP_400_BAD_REQUEST)
+        return Response({'error': 'Já existe um usuário com esse nome de usuário derivado de e-mail.'}, status=status.HTTP_400_BAD_REQUEST)
 
     try:
         existing_user = User.objects.get(name=name)
@@ -84,6 +85,31 @@ def create_user(request):
 
     return Response({'message': 'Código de verificação enviado ao email.', 'user_id': user.id})
 
+@swagger_auto_schema(method='patch', request_body=UpdateUserSerializer)
+@api_view(['PATCH'])
+def update_user_profile(request):
+    if not request.session.get('logged'):
+        return Response({'error': 'Autenticação necessária.'}, status=status.HTTP_401_UNAUTHORIZED)
+
+    try:
+        user_id = request.session.get('user_id')
+        user_instance = User.objects.get(id=user_id)
+    except User.DoesNotExist:
+        return Response({'error': 'Usuário não encotrado.'}, status=status.HTTP_404_NOT_FOUND)
+
+    serializer = UpdateUserSerializer(instance=user_instance, data=request.data, partial=True)
+    
+    if serializer.is_valid():
+        updated_user = serializer.save()
+
+        if getattr(updated_user, '_email_changed', False):
+            return Response({
+                'message': 'Perfil atualizado. Código de confirmação de email enviado. Por favor verificar.'
+            }, status=status.HTTP_200_OK)
+        else:
+            return Response({'message': 'Profile updated successfully.'}, status=status.HTTP_200_OK)
+    
+    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 @swagger_auto_schema(method='delete', request_body=DeleteUserSerializer)
 @api_view(['DELETE'])
@@ -118,6 +144,7 @@ def login_user(request):
 
     if check_password(password, user.password) and user.email_verified:
         request.session['logged'] = True
+        request.session['user_id'] = user.id
         return Response({'message': 'Usuário autenticado', 'user_id': user.id})
     else:
         return Response({'error': 'Falha na autenticação'}, status=status.HTTP_401_UNAUTHORIZED)
@@ -238,7 +265,7 @@ def reset_password_chooseNew(request):
         else:
             return Response({'error': 'Requisição ainda não validada'}, status=status.HTTP_401_UNAUTHORIZED)
     except PasswordReset.DoesNotExist:
-        return Response({'error': 'No password recovery request exists.'}, status=status.HTTP_401_UNAUTHORIZED)
+        return Response({'error': 'Não existe uma solicitação para troca de senha aberta.'}, status=status.HTTP_401_UNAUTHORIZED)
 
 @swagger_auto_schema(method='post', request_body=ResetPasswordResend)
 @api_view(['POST'])

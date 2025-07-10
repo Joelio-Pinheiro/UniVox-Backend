@@ -29,8 +29,11 @@ urlpatterns = [
 
     #User stuff
 
+    #URL PARA TESTE
     path('users/', list_users),
+    
     path('users/create/', create_user),
+    path('users/profile/update/', update_user_profile),
     path('users/delete/', delete_user),
     path('users/login/', login_user),
     path('users/logout/', logout_user),
