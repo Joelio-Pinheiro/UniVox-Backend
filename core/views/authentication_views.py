@@ -6,10 +6,10 @@ from django.utils import timezone
 from django.contrib.auth.hashers import check_password, make_password
 from django.core.validators import validate_email
 from django.core.exceptions import ValidationError
-from .models import User, EmailConfirmation, PasswordReset
+from ..models import User, EmailConfirmation, PasswordReset
 from univox.email import generate_confirmation_code, send_confirmation_email, is_code_expired, send_password_confirmation_code
 
-from .serializers import (
+from ..serializers import (
     CreateUserSerializer,
     DeleteUserSerializer,
     LoginUserSerializer,
@@ -68,8 +68,8 @@ def create_user(request):
     return Response({'message': 'Código de verificação enviado', 'user_id': user.id})
 
 
-@swagger_auto_schema(method='post', request_body=DeleteUserSerializer)
-@api_view(['POST'])
+@swagger_auto_schema(method='delete', request_body=DeleteUserSerializer)
+@api_view(['DELETE'])
 def delete_user(request):
     name = request.data.get('name')
 

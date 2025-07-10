@@ -36,7 +36,7 @@ SECRET_KEY = 'django-insecure-bnr-@ji^w_bqw4f1(zdr=^662jp!c33rre&i6v9334n5mhovld
 DEBUG = True
 
 CORS_ALLOW_CREDENTIALS = True
-ALLOWED_HOSTS = ['univox-backend.onrender.com']
+ALLOWED_HOSTS = ['univox-backend.onrender.com', '127.0.0.1', 'localhost']
 SESSION_COOKIE_SAMESITE = "None"
 SESSION_COOKIE_SECURE = True
 
