@@ -18,13 +18,22 @@ from ..serializers import (
     ResetPasswordValidateSerializer,
     ResetPasswordChooseNewSerializer,
     ResetPasswordResend,
+    UserListSerializer
 )
+
+#GET PARA TESTES
+@api_view(['GET'])
+def list_users(request):
+
+    users = User.objects.all().order_by('id')
+    serializer = UserListSerializer(users, many=True)
+    return Response(serializer.data)
 
 @swagger_auto_schema(method='post', request_body=CreateUserSerializer)
 @api_view(['POST'])
 def create_user(request):
     data = request.data
-    required_fields = ['name', 'password', 'email', 'contact_number']
+    required_fields = ['name', 'password', 'email']
     missing_fields = [field for field in required_fields if not data.get(field)]
 
     if missing_fields:
@@ -33,25 +42,33 @@ def create_user(request):
     name = data['name']
     password = data['password']
     email = data['email']
-    contact_number = data['contact_number']
 
     try:
         validate_email(email)
     except ValidationError:
-        return Response({'error': 'Formato de email inválido'}, status=status.HTTP_400_BAD_REQUEST)
+        return Response({'error': 'Invalid email format.'}, status=status.HTTP_400_BAD_REQUEST)
 
     if User.objects.filter(name__iexact=name).exists():
-        return Response({'error': 'Nome de usuário já existe'}, status=status.HTTP_400_BAD_REQUEST)
+        return Response({'error': 'Name already exists.'}, status=status.HTTP_400_BAD_REQUEST)
 
     if User.objects.filter(email__iexact=email).exists():
-        return Response({'error': 'Já existe uma conta com este email'}, status=status.HTTP_400_BAD_REQUEST)
+        return Response({'error': 'Email already exists.'}, status=status.HTTP_400_BAD_REQUEST)
+
+    try:
+        email_prefix = email.split('@')[0]
+        user_name = f'@{email_prefix}'
+    except IndexError:
+        return Response({'error': 'Invalid email format.'}, status=status.HTTP_400_BAD_REQUEST)
+    
+    if User.objects.filter(user_name__iexact=user_name).exists():
+        return Response({'error': 'A user with this email-derived username already exists.'}, status=status.HTTP_400_BAD_REQUEST)
 
     try:
         existing_user = User.objects.get(name=name)
         existing_confirmation = EmailConfirmation.objects.get(user=existing_user)
 
         if not is_code_expired(existing_confirmation.created_at):
-            return Response({'error': 'Cannot use this name right now!'}, status=status.HTTP_401_UNAUTHORIZED)
+            return Response({'error': 'Não é possível usar este nome agora!'}, status=status.HTTP_401_UNAUTHORIZED)
         else:
             existing_user.delete()
 
@@ -59,13 +76,13 @@ def create_user(request):
         pass
 
     hashed_password = make_password(password)
-    user = User.objects.create(name=name, password=hashed_password, email=email, contact_number=contact_number)
+    user = User.objects.create(name=name, password=hashed_password, email=email, user_name=user_name)
 
     code = generate_confirmation_code()
     EmailConfirmation.objects.create(user=user, code=code)
     send_confirmation_email(user, code)
 
-    return Response({'message': 'Código de verificação enviado', 'user_id': user.id})
+    return Response({'message': 'Código de verificação enviado ao email.', 'user_id': user.id})
 
 
 @swagger_auto_schema(method='delete', request_body=DeleteUserSerializer)

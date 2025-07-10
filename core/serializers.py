@@ -2,6 +2,12 @@ from rest_framework import serializers
 from django.core.validators import validate_email
 from .models import User
 
+#SERIALIZER PARA TESTES
+class UserListSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = User
+        fields = ['id', 'name', 'user_name', 'email', 'email_verified', 'description', 'created_at']
+
 class CreateUserSerializer(serializers.Serializer):
     name = serializers.CharField(max_length=150)
     password = serializers.CharField(write_only=True)
