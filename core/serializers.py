@@ -77,6 +77,8 @@ class UpdateUserSerializer(serializers.Serializer):
 class DeleteUserSerializer(serializers.Serializer):
     name = serializers.CharField(max_length=150)
 
+class DeleteUserAccountSerializer(serializers.Serializer):
+    password = serializers.CharField(write_only=True)
 
 class LoginUserSerializer(serializers.Serializer):
     email = serializers.EmailField()

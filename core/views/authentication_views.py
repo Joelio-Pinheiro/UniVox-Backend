@@ -19,7 +19,8 @@ from ..serializers import (
     ResetPasswordChooseNewSerializer,
     ResetPasswordResend,
     UserListSerializer,
-    UpdateUserSerializer
+    UpdateUserSerializer,
+    DeleteUserAccountSerializer
 )
 
 #GET PARA TESTES
@@ -107,13 +108,13 @@ def update_user_profile(request):
                 'message': 'Perfil atualizado. Código de confirmação de email enviado. Por favor verificar.'
             }, status=status.HTTP_200_OK)
         else:
-            return Response({'message': 'Profile updated successfully.'}, status=status.HTTP_200_OK)
+            return Response({'message': 'Perfil atualizado com sucesso.'}, status=status.HTTP_200_OK)
     
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 @swagger_auto_schema(method='delete', request_body=DeleteUserSerializer)
 @api_view(['DELETE'])
-def delete_user(request):
+def delete_user_by_name(request):
     name = request.data.get('name')
 
     if not User.objects.filter(name__iexact=name).exists():
@@ -123,6 +124,31 @@ def delete_user(request):
     user.delete()
 
     return Response({'message': 'Conta do usuário removida.', 'user_name': name})
+
+@swagger_auto_schema(method='delete', request_body=DeleteUserAccountSerializer)
+@api_view(['DELETE'])
+def delete_user_logged(request):
+    if not request.session.get('logged'):
+        return Response({'error': 'Autenticação necessária para deletar a conta.'}, status=status.HTTP_401_UNAUTHORIZED)
+    
+    try:
+        user_id = request.session.get('user_id')
+        user = User.objects.get(id=user_id)
+    except User.DoesNotExist:
+        return Response({'error': 'Usuário não encontrado.'}, status=status.HTTP_404_NOT_FOUND)
+
+    password = request.data.get('password')
+    if not password:
+        return Response({'error': 'Confirmação da senha é necessária para deletar a conta.'}, status=status.HTTP_400_BAD_REQUEST)
+
+    if not check_password(password, user.password):
+        return Response({'error': 'Senha inválida.'}, status=status.HTTP_401_UNAUTHORIZED)
+    
+    user_name_deleted = user.name
+    user.delete()
+    request.session.flush()
+
+    return Response({'message': 'Conta deletada com sucesso.', 'user_name': user_name_deleted})
 
 
 @swagger_auto_schema(method='post', request_body=LoginUserSerializer)
