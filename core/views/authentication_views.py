@@ -10,20 +10,11 @@ from ..models import User, EmailConfirmation, PasswordReset
 from univox.email import generate_confirmation_code, send_confirmation_email, is_code_expired, send_password_confirmation_code
 
 from ..serializers import (
-    CreateUserSerializer,
-    DeleteUserSerializer,
-    LoginUserSerializer,
-    VerifyEmailSerializer,
-    ResetPasswordRequestSerializer,
-    ResetPasswordValidateSerializer,
-    ResetPasswordChooseNewSerializer,
-    ResetPasswordResend,
-    UserListSerializer,
-    UpdateUserSerializer,
-    DeleteUserAccountSerializer
+    CreateUserSerializer, DeleteUserSerializer, LoginUserSerializer, VerifyEmailSerializer, ResetPasswordRequestSerializer,
+    ResetPasswordValidateSerializer, ResetPasswordChooseNewSerializer, ResetPasswordResend, UserListSerializer, UpdateUserSerializer, DeleteUserAccountSerializer
 )
 
-#GET PARA TESTES
+# ---- Lista de Usuários (Teste) ---- 
 @api_view(['GET'])
 def list_users(request):
 
@@ -31,6 +22,7 @@ def list_users(request):
     serializer = UserListSerializer(users, many=True)
     return Response(serializer.data)
 
+# ---- Criar usuário ---- 
 @swagger_auto_schema(method='post', request_body=CreateUserSerializer)
 @api_view(['POST'])
 def create_user(request):
@@ -86,6 +78,7 @@ def create_user(request):
 
     return Response({'message': 'Código de verificação enviado ao email.', 'user_id': user.id})
 
+# ---- Atualizar usuário ---- 
 @swagger_auto_schema(method='patch', request_body=UpdateUserSerializer)
 @api_view(['PATCH'])
 def update_user_profile(request):
@@ -112,6 +105,7 @@ def update_user_profile(request):
     
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
+# ---- Deletar usuário pelo nome (Testes) ---- 
 @swagger_auto_schema(method='delete', request_body=DeleteUserSerializer)
 @api_view(['DELETE'])
 def delete_user_by_name(request):
@@ -125,6 +119,7 @@ def delete_user_by_name(request):
 
     return Response({'message': 'Conta do usuário removida.', 'user_name': name})
 
+# ---- Deletar usuário logado ---- 
 @swagger_auto_schema(method='delete', request_body=DeleteUserAccountSerializer)
 @api_view(['DELETE'])
 def delete_user_logged(request):
@@ -150,7 +145,7 @@ def delete_user_logged(request):
 
     return Response({'message': 'Conta deletada com sucesso.', 'user_name': user_name_deleted})
 
-
+# ---- Login de usuário ---- 
 @swagger_auto_schema(method='post', request_body=LoginUserSerializer)
 @api_view(['POST'])
 def login_user(request):
@@ -175,6 +170,7 @@ def login_user(request):
     else:
         return Response({'error': 'Falha na autenticação'}, status=status.HTTP_401_UNAUTHORIZED)
 
+# ---- Logout usuário ---- 
 @api_view(['POST'])
 def logout_user(request):
     if (not request.session.get('logged')):
@@ -183,6 +179,7 @@ def logout_user(request):
     request.session.flush()
     return Response({'message': 'Sessão encerrada com sucesso'})
 
+# ---- Verificação de email do usuário ---- 
 @swagger_auto_schema(method='post', request_body=VerifyEmailSerializer)
 @api_view(['POST'])
 def verify_email(request):
@@ -217,6 +214,7 @@ def verify_email(request):
     except EmailConfirmation.DoesNotExist:
         return Response({'error': 'Requisição de confirmação desconhecida'}, status=status.HTTP_401_UNAUTHORIZED)
 
+# ---- Resetar senha do usuário ---- 
 @swagger_auto_schema(method='post', request_body=ResetPasswordRequestSerializer)
 @api_view(['POST'])
 def reset_password_request(request):
@@ -243,6 +241,7 @@ def reset_password_request(request):
 
     return Response({'message': 'Código enviado. Por favor, verifique seu email'})
 
+# ---- Validação de reset de senha do usuário ---- 
 @swagger_auto_schema(method='post', request_body=ResetPasswordValidateSerializer)
 @api_view(['POST'])
 def reset_password_validate(request):
