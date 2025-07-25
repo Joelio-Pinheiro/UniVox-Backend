@@ -17,7 +17,7 @@ schema_view = get_schema_view(
     ),
     public=True,
     permission_classes=[permissions.AllowAny],
-    url='https://univox-backend.onrender.com',
+    url='https://univox-backend.onrender.com', 
 )
 
 urlpatterns = [
