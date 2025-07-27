@@ -202,8 +202,7 @@ def delete_post(request, post_id):
     if post.creator != user:
         return Response({'error': 'Você não tem permissão para deletar este post.'}, status=status.HTTP_403_FORBIDDEN)
     
-    post.is_deleted = True
-    post.save(update_fields=['is_deleted'])
+    post.delete()
     
     return Response(status=status.HTTP_204_NO_CONTENT)
 
