@@ -9,7 +9,7 @@ class User(models.Model):
     user_name = models.CharField(max_length=50, unique=True, blank=True)
     password = models.CharField(max_length=100)
     email = models.CharField(max_length=70, unique=True)
-    description = models.CharField(max_length=200, blank=True)
+    description = models.CharField(max_length=100, blank=True)
     popularity_score = models.IntegerField(default=0)
     created_at = models.DateTimeField(auto_now_add=True)
     email_verified = models.BooleanField(default=False)

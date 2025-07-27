@@ -44,6 +44,8 @@ urlpatterns = [
     path('users/passwordresetvalidate/', reset_password_validate),
     path('users/passwordresetnewpass/', reset_password_chooseNew),
     path('users/passwordresetresend/', reset_password_resend),
+    path('users/me/', get_my_profile,),
+
 
     # --- Rotas de Posts ---
     path('posts/create/', create_post),
@@ -60,9 +62,10 @@ urlpatterns = [
     path('topics/', list_topics),
     path('topics/create/', create_topic),
     path('topics/<int:topic_id>/posts/', list_posts_by_topic),
+    path('users/me/recent-topics/', list_my_recent_topics),
+
 
      # --- Rotas de Edição e Deleção ---
-    #Posts
     path('posts/<int:post_id>/update/', update_post),
     path('posts/<int:post_id>/delete/', delete_post),
 

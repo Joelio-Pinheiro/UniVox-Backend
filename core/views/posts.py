@@ -5,6 +5,9 @@ from drf_yasg.utils import swagger_auto_schema
 from django.shortcuts import get_object_or_404
 from django.contrib.contenttypes.models import ContentType
 from django.db import transaction
+from django.utils import timezone
+from datetime import timedelta
+from django.db.models import Q
 
 from ..models import User, Post, Comment, Vote, Topic
 
@@ -30,32 +33,58 @@ def create_post(request):
 # ---- Vizualização de um Post ----
 @api_view(['GET'])
 def view_post(request, post_id):
-    post = get_object_or_404(Post, id=post_id, is_deleted=False)
-    top_level_comments = post.comments.filter(parent_comment__isnull=True, is_deleted=False)
-    serializer = PostDetailSerializer(post)
-    data = serializer.data
-    data['comments'] = CommentSerializer(top_level_comments, many=True).data
+    post = get_object_or_404(Post, id=post_id)
+    top_level_comments = post.comments.filter(parent_comment__isnull=True).order_by('-created_at')
+
+    post_votes_map = {}
+    comment_votes_map = {}
+    if request.session.get('logged'):
+        user_id = request.session.get('user_id')
+        user = get_object_or_404(User, id=user_id)
+        
+        post_vote = Vote.objects.filter(user=user, content_type=ContentType.objects.get_for_model(Post), object_id=post.id).first()
+        if post_vote:
+            post_votes_map = {post.id: post_vote.vote_type}
+        
+        all_comments_on_page = post.comments.all()
+        comment_votes = Vote.objects.filter(
+            user=user, 
+            content_type=ContentType.objects.get_for_model(Comment), 
+            object_id__in=[comment.id for comment in all_comments_on_page]
+        )
+        comment_votes_map = {vote.object_id: vote.vote_type for vote in comment_votes}
+
+    post_context = {'request': request, 'votes_map': post_votes_map}
+    comment_context = {'request': request, 'votes_map': comment_votes_map}
+
+    data = PostDetailSerializer(post, context=post_context).data
+    data['comments'] = CommentSerializer(top_level_comments, many=True, context=comment_context).data
+
     return Response(data)
 
 # ---- Lista de Posts (Testes) ----
 @api_view(['GET'])
 def list_posts(request):
-
-    posts = Post.objects.filter(is_deleted=False).order_by('-created_at')
+    posts = Post.objects.all().order_by('-created_at')
     
-    serializer = PostListSerializer(posts, many=True)
+    votes_map = {}
+    if request.session.get('logged'):
+        user_id = request.session.get('user_id')
+        user = get_object_or_404(User, id=user_id)
+        post_content_type = ContentType.objects.get_for_model(Post)
+        
+        user_votes = Vote.objects.filter(
+            user=user,
+            content_type=post_content_type,
+            object_id__in=[post.id for post in posts]
+        )
+        votes_map = {vote.object_id: vote.vote_type for vote in user_votes}
+    
+    context = {'request': request, 'votes_map': votes_map}
+    serializer = PostListSerializer(posts, many=True, context=context)
     
     return Response(serializer.data)
 
-# ---- Lista de Posts por Tópicos ----
-@api_view(['GET'])
-def list_posts_by_topic(request, topic_id):
-    topic = get_object_or_404(Topic, id=topic_id)
-    posts = topic.posts.filter(is_deleted=False)
-    serializer = PostDetailSerializer(posts, many=True)
-    return Response(serializer.data)
-
-# ---- Lista de Posts do usuário ----
 @api_view(['GET'])
 def list_my_posts(request):
     if not request.session.get('logged'):
@@ -63,15 +92,48 @@ def list_my_posts(request):
     
     user = get_object_or_404(User, id=request.session.get('user_id'))
     
-    posts = Post.objects.filter(creator=user, is_deleted=False).order_by('-created_at')
-    serializer = PostListSerializer(posts, many=True)
+    posts = Post.objects.filter(creator=user).order_by('-created_at')
+    
+    votes_map = {}
+    post_content_type = ContentType.objects.get_for_model(Post)
+    user_votes = Vote.objects.filter(
+        user=user,
+        content_type=post_content_type,
+        object_id__in=[post.id for post in posts]
+    )
+    votes_map = {vote.object_id: vote.vote_type for vote in user_votes}
+    context = {'request': request, 'votes_map': votes_map}
+
+    serializer = PostListSerializer(posts, many=True, context=context)
+    
+    return Response(serializer.data)
+
+# ---- Lista de Posts por Tópicos ----
+@api_view(['GET'])
+def list_posts_by_topic(request, topic_id):
+    topic = get_object_or_404(Topic, id=topic_id)
+    posts = topic.posts.all().order_by('-created_at')
+
+    votes_map = {}
+    if request.session.get('logged'):
+        user_id = request.session.get('user_id')
+        user = get_object_or_404(User, id=user_id)
+        post_content_type = ContentType.objects.get_for_model(Post)
+        user_votes = Vote.objects.filter(
+            user=user,
+            content_type=post_content_type,
+            object_id__in=[post.id for post in posts]
+        )
+        votes_map = {vote.object_id: vote.vote_type for vote in user_votes}
+
+    context = {'request': request, 'votes_map': votes_map}
+    serializer = PostListSerializer(posts, many=True, context=context) 
     
     return Response(serializer.data)
 
 # ---- Lista de Posts votados pelo usuário (upvote, downvote) ----
 @api_view(['GET'])
 def list_my_voted_posts(request, vote_type_filter):
-
     if not request.session.get('logged'):
         return Response({'error': 'Autenticação necessária.'}, status=status.HTTP_401_UNAUTHORIZED)
     
@@ -82,7 +144,7 @@ def list_my_voted_posts(request, vote_type_filter):
     elif vote_type_filter == 'downvoted':
         vote_type = Vote.VoteType.DOWNVOTE
     else:
-        return Response({'error': 'Filtro de voto inválido.'}, status=status.HTTP_400_BAD_REQUEST)
+        return Response({'error': 'Filtro de voto inválido. Use "upvoted" ou "downvoted".'}, status=status.HTTP_400_BAD_REQUEST)
 
     post_content_type = ContentType.objects.get_for_model(Post)
     voted_post_ids = Vote.objects.filter(
@@ -92,7 +154,11 @@ def list_my_voted_posts(request, vote_type_filter):
     ).values_list('object_id', flat=True)
 
     posts = Post.objects.filter(id__in=voted_post_ids, is_deleted=False).order_by('-created_at')
-    serializer = PostListSerializer(posts, many=True)
+    
+    votes_map = {post.id: vote_type for post in posts}
+    context = {'request': request, 'votes_map': votes_map}
+    
+    serializer = PostListSerializer(posts, many=True, context=context)
     
     return Response(serializer.data)
 
@@ -103,7 +169,7 @@ def update_post(request, post_id):
     if not request.session.get('logged'):
         return Response({'error': 'Autenticação necessária.'}, status=status.HTTP_401_UNAUTHORIZED)
     
-    post = get_object_or_404(Post, id=post_id, is_deleted=False)
+    post = get_object_or_404(Post, id=post_id)
     user = get_object_or_404(User, id=request.session.get('user_id'))
 
     if post.creator != user:
@@ -112,7 +178,15 @@ def update_post(request, post_id):
     serializer = PostUpdateSerializer(instance=post, data=request.data, partial=True)
     if serializer.is_valid():
         updated_post = serializer.save()
-        return Response(PostDetailSerializer(updated_post).data)
+
+        votes_map = {}
+        post_vote = Vote.objects.filter(user=user, content_type=ContentType.objects.get_for_model(Post), object_id=updated_post.id).first()
+        if post_vote:
+            votes_map = {updated_post.id: post_vote.vote_type}
+        
+        context = {'request': request, 'votes_map': votes_map}
+        # Retorna o post atualizado com o contexto
+        return Response(PostDetailSerializer(updated_post, context=context).data)
     
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
@@ -157,9 +231,19 @@ def list_my_comments(request):
     
     user = get_object_or_404(User, id=request.session.get('user_id'))
     
-    comments = Comment.objects.filter(creator=user, is_deleted=False).order_by('-created_at')
+    comments = Comment.objects.filter(creator=user).order_by('-created_at')
     
-    serializer = CommentSerializer(comments, many=True)
+    votes_map = {}
+    comment_content_type = ContentType.objects.get_for_model(Comment)
+    user_votes = Vote.objects.filter(
+        user=user,
+        content_type=comment_content_type,
+        object_id__in=[comment.id for comment in comments]
+    )
+    votes_map = {vote.object_id: vote.vote_type for vote in user_votes}
+    context = {'request': request, 'votes_map': votes_map}
+    
+    serializer = CommentSerializer(comments, many=True, context=context)
     
     return Response(serializer.data)
 
@@ -194,10 +278,8 @@ def delete_comment(request, comment_id):
 
     if comment.creator != user:
         return Response({'error': 'Você não tem permissão para deletar este comentário.'}, status=status.HTTP_403_FORBIDDEN)
-    
-    comment.is_deleted = True
-    comment.content = "[Comentário removido pelo autor]"
-    comment.save(update_fields=['is_deleted', 'content'])
+
+    comment.delete()
     
     return Response(status=status.HTTP_204_NO_CONTENT)
 
@@ -219,6 +301,42 @@ def create_topic(request):
 def list_topics(request):
     topics = Topic.objects.all().order_by('name')
     serializer = TopicSerializer(topics, many=True)
+    return Response(serializer.data)
+
+@api_view(['GET'])
+def list_my_recent_topics(request):
+    if not request.session.get('logged'):
+        return Response({'error': 'Autenticação necessária.'}, status=status.HTTP_401_UNAUTHORIZED)
+    
+    user = get_object_or_404(User, id=request.session.get('user_id'))
+    
+    recent_period = timezone.now() - timedelta(days=30)
+    
+    posts_created = Post.objects.filter(creator=user, created_at__gte=recent_period)
+    topics_from_created_posts = Topic.objects.filter(posts__in=posts_created)
+
+    posts_commented_on = Post.objects.filter(comments__creator=user, comments__created_at__gte=recent_period)
+    topics_from_commented_posts = Topic.objects.filter(posts__in=posts_commented_on)
+
+    post_content_type = ContentType.objects.get_for_model(Post)
+    voted_post_ids = Vote.objects.filter(
+        user=user, 
+        content_type=post_content_type
+
+    ).values_list('object_id', flat=True)
+    posts_voted_on = Post.objects.filter(id__in=voted_post_ids)
+    topics_from_voted_posts = Topic.objects.filter(posts__in=posts_voted_on)
+
+    recent_topics_qs = topics_from_created_posts.union(
+        topics_from_commented_posts, 
+        topics_from_voted_posts
+    )
+
+    recent_topic_ids = [topic.id for topic in recent_topics_qs]
+    
+    final_topics = Topic.objects.filter(id__in=recent_topic_ids).order_by('-id')[:10]
+
+    serializer = TopicSerializer(final_topics, many=True)
     return Response(serializer.data)
 
 # ---- Utilização de Upvote e Downvote ----
