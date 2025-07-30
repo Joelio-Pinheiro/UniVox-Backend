@@ -1,27 +1,23 @@
-from rest_framework import serializers
-from django.core.validators import validate_email
-from .models import User, EmailConfirmation
-from univox.email import generate_confirmation_code, send_confirmation_email
-from django.contrib.auth.hashers import make_password
+from django.contrib.auth.hashers import check_password, make_password
+from django.contrib.auth.password_validation import validate_password
+from django.core.exceptions import ValidationError as DjangoValidationError
 from django.utils import timezone
-from .models import User
+from rest_framework import serializers
 
-from .models import User, EmailConfirmation, Post, Comment, Vote, Topic
+from .models import (Comment, EmailConfirmation, Post, Topic, User, Vote)
+
 from univox.email import generate_confirmation_code, send_confirmation_email
 
 def validate_post_data(data):
-    """Função reutilizável para validar dados de post."""
-    # Validação do Título
+
     title = data.get('title')
-    if title is not None and not (1 <= len(title) <= 100):
-        raise serializers.ValidationError({'title': 'O título deve ter entre 1 e 100 caracteres.'})
+    if title is not None and not (1 <= len(title) <= 300):
+        raise serializers.ValidationError({'title': 'O título deve ter entre 1 e 300 caracteres.'})
 
-    # Validação do Conteúdo
     content = data.get('content')
-    if content is not None and not (1 <= len(content) <= 600):
-        raise serializers.ValidationError({'content': 'O conteúdo deve ter entre 1 e 600 caracteres.'})
+    if content is not None and not (1 <= len(content) <= 2000):
+        raise serializers.ValidationError({'content': 'O conteúdo deve ter entre 1 e 2000 caracteres.'})
 
-    # Validação do número de Tags
     topics = data.get('topics')
     if topics is not None and len(topics) > 5:
         raise serializers.ValidationError({'topics': 'Você pode adicionar no máximo 5 tags.'})
@@ -41,60 +37,70 @@ class CreateUserSerializer(serializers.Serializer):
     contact_number = serializers.CharField(max_length=20)
 
 class UpdateUserSerializer(serializers.Serializer):
+    # ... (declaração dos campos continua a mesma) ...
     name = serializers.CharField(max_length=50, required=False)
     user_name = serializers.CharField(max_length=50, required=False)
     description = serializers.CharField(max_length=200, required=False)
     email = serializers.EmailField(required=False)
-    password = serializers.CharField(write_only=True, required=False)
-
     avatar_id = serializers.IntegerField(min_value=1, max_value=4, required=False)
+    current_password = serializers.CharField(write_only=True, required=False, allow_blank=False)
+    new_password = serializers.CharField(write_only=True, required=False, allow_blank=False)
+    new_password_confirmation = serializers.CharField(write_only=True, required=False, allow_blank=False)
+
 
     def validate(self, data):
-        instance = self.instance
 
-        if 'name' in data and User.objects.filter(name__iexact=data['name']).exclude(pk=instance.pk).exists():
-            raise serializers.ValidationError({'error': 'Esse nome já está em uso.'})
+        if 'new_password' not in data and 'current_password' not in data and 'new_password_confirmation' not in data:
+            return super().validate(data)
+
+        if not all(key in data for key in ['current_password', 'new_password', 'new_password_confirmation']):
+            raise serializers.ValidationError('Para mudar a senha, você precisa fornecer a senha atual, a nova senha e a confirmação da nova senha.')
         
-        if 'user_name' in data and User.objects.filter(user_name__iexact=data['user_name']).exclude(pk=instance.pk).exists():
-            raise serializers.ValidationError({'error': 'Esse username já está em uso.'})
+        current_password = data.get('current_password')
+        user = self.instance
+        if not check_password(current_password, user.password):
+            raise serializers.ValidationError({'current_password': 'A senha atual está incorreta.'})
 
-        if 'email' in data and User.objects.filter(email__iexact=data['email']).exclude(pk=instance.pk).exists():
-            raise serializers.ValidationError({'error': 'Esse email já está em uso.'})
+        if data.get('new_password') == current_password:
+            raise serializers.ValidationError({'new_password': 'A nova senha não pode ser igual à senha atual.'})
             
-        return data
+        if data.get('new_password') != data.get('new_password_confirmation'):
+            raise serializers.ValidationError({'new_password_confirmation': 'A nova senha e a confirmação não correspondem.'})
 
-    def validate_user_name(self, value):
-        if not value.startswith('@'):
-            value = f'@{value}'
-        return value
+        try:
+            validate_password(data.get('new_password'), user=user)
+        except DjangoValidationError as e:
+            raise serializers.ValidationError({'new_password': list(e.messages)})
+
+        return super().validate(data)
 
     def update(self, instance, validated_data):
 
-        instance._email_changed = False 
-
+        instance._email_changed = False
 
         new_email = validated_data.get('email')
-        if new_email and new_email != instance.email:
+        if new_email and new_email.lower() != instance.email.lower():
             instance.email = new_email
             instance.email_verified = False
+            
             code = generate_confirmation_code()
             EmailConfirmation.objects.update_or_create(
                 user=instance,
                 defaults={'code': code, 'created_at': timezone.now(), 'is_confirmed': False}
             )
             send_confirmation_email(instance, code)
-
+            
             instance._email_changed = True
 
-
-        if 'password' in validated_data:
-            instance.password = make_password(validated_data['password'])
-        
+        if 'new_password' in validated_data:
+            instance.password = make_password(validated_data['new_password'])
         instance.name = validated_data.get('name', instance.name)
         instance.user_name = validated_data.get('user_name', instance.user_name)
         instance.description = validated_data.get('description', instance.description)
-        instance.email = validated_data.get('email', instance.email)
-        
+        instance.avatar_id = validated_data.get('avatar_id', instance.avatar_id)
+        new_email = validated_data.get('email')
+        if new_email and new_email != instance.email:
+            pass
         instance.save()
         return instance
 
@@ -154,22 +160,36 @@ class TopicSerializer(serializers.ModelSerializer):
 class ReplySerializer(serializers.ModelSerializer):
     creator = UserPublicSerializer(read_only=True)
     
+    user_vote = serializers.SerializerMethodField()
+
     class Meta:
         model = Comment
-        fields = ['id', 'creator', 'content', 'created_at', 'is_edited', 'is_deleted', 'upvotes', 'downvotes', 'replies']
+        fields = ['id', 'creator', 'content', 'created_at', 'is_edited', 'is_deleted', 'user_vote', 'upvotes', 'downvotes', 'replies']
 
     def get_fields(self):
         fields = super().get_fields()
         fields['replies'] = ReplySerializer(many=True, read_only=True)
         return fields
+    
+    def get_user_vote(self, obj):
+        votes_map = self.context.get('votes_map', {})
+        return votes_map.get(obj.id, None)
 
 class CommentSerializer(serializers.ModelSerializer):
     creator = UserPublicSerializer(read_only=True)
     replies = ReplySerializer(many=True, read_only=True)
 
+    user_vote = serializers.SerializerMethodField()
+
+
     class Meta:
         model = Comment
-        fields = ['id', 'creator', 'content', 'created_at', 'is_edited', 'is_deleted', 'upvotes', 'downvotes', 'replies']
+        fields = ['id', 'creator', 'content', 'created_at', 'is_edited', 'is_deleted', 'user_vote', 'upvotes', 'downvotes', 'replies']
+
+    def get_user_vote(self, obj):
+        votes_map = self.context.get('votes_map', {})
+        return votes_map.get(obj.id, None)
+
 
 class PostDetailSerializer(serializers.ModelSerializer):
     creator = UserPublicSerializer(read_only=True)
@@ -177,12 +197,18 @@ class PostDetailSerializer(serializers.ModelSerializer):
     comments = CommentSerializer(many=True, read_only=True)
     comment_count = serializers.SerializerMethodField()
 
+    user_vote = serializers.SerializerMethodField()
+
     class Meta:
         model = Post
-        fields = ['id', 'creator', 'topics', 'title', 'content', 'created_at', 'is_edited', 'is_deleted', 'upvotes', 'downvotes', 'comment_count', 'comments']
+        fields = ['id', 'creator', 'topics', 'title', 'content', 'created_at', 'is_edited', 'is_deleted', 'user_vote', 'upvotes', 'downvotes', 'comment_count', 'comments']
     
     def get_comment_count(self, obj):
         return obj.comments.filter(is_deleted=False).count()
+    
+    def get_user_vote(self, obj):
+        votes_map = self.context.get('votes_map', {})
+        return votes_map.get(obj.id, None)
 
 class PostCreateSerializer(serializers.ModelSerializer):
     topics = serializers.ListField(
@@ -290,18 +316,34 @@ class PostListSerializer(serializers.ModelSerializer):
     topics = TopicSerializer(many=True, read_only=True)
     comment_count = serializers.SerializerMethodField()
 
+    user_vote = serializers.SerializerMethodField()
+
     class Meta:
         model = Post
         fields = [
-            'id', 
-            'title', 
-            'creator', 
-            'topics', 
-            'created_at', 
-            'upvotes', 
-            'downvotes', 
-            'comment_count'
+            'id', 'title', 'creator', 'topics', 'created_at', 
+            'upvotes', 'downvotes', 'comment_count', 'is_edited', 'is_deleted',
+            'user_vote'
         ]
 
     def get_comment_count(self, obj):
         return obj.comments.filter(is_deleted=False).count()
+    
+    def get_user_vote(self, obj):
+
+            votes_map = self.context.get('votes_map', {})
+            return votes_map.get(obj.id, None)
+    
+class MyProfileSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = User
+        fields = [
+            'id', 
+            'name', 
+            'user_name', 
+            'email', 
+            'description',
+            'avatar_id',
+            'email_verified',
+            'created_at'
+        ]

@@ -3,6 +3,7 @@ from rest_framework.response import Response
 from rest_framework import status
 from drf_yasg.utils import swagger_auto_schema
 from django.utils import timezone
+from django.shortcuts import get_object_or_404
 from django.contrib.auth.hashers import check_password, make_password
 from django.core.validators import validate_email
 from django.core.exceptions import ValidationError
@@ -11,7 +12,7 @@ from univox.email import generate_confirmation_code, send_confirmation_email, is
 
 from ..serializers import (
     CreateUserSerializer, DeleteUserSerializer, LoginUserSerializer, VerifyEmailSerializer, ResetPasswordRequestSerializer,
-    ResetPasswordValidateSerializer, ResetPasswordChooseNewSerializer, ResetPasswordResend, UserListSerializer, UpdateUserSerializer, DeleteUserAccountSerializer
+    ResetPasswordValidateSerializer, ResetPasswordChooseNewSerializer, ResetPasswordResend, UserListSerializer, UpdateUserSerializer, DeleteUserAccountSerializer, MyProfileSerializer
 )
 
 # ---- Lista de Usuários (Teste) ---- 
@@ -20,6 +21,18 @@ def list_users(request):
 
     users = User.objects.all().order_by('id')
     serializer = UserListSerializer(users, many=True)
+    return Response(serializer.data)
+
+@api_view(['GET'])
+def get_my_profile(request):
+
+    if not request.session.get('logged'):
+        return Response({'error': 'Autenticação necessária.'}, status=status.HTTP_401_UNAUTHORIZED)
+    
+    user = get_object_or_404(User, id=request.session.get('user_id'))
+    
+    serializer = MyProfileSerializer(user)
+    
     return Response(serializer.data)
 
 # ---- Criar usuário ---- 
